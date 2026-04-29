@@ -330,6 +330,9 @@
 
         localPlayer.x = Math.max(PADDING + PLAYER_RADIUS, Math.min(WIDTH - PADDING - PLAYER_RADIUS, localPlayer.x));
         localPlayer.y = Math.max(PADDING + PLAYER_RADIUS, Math.min(HEIGHT - PADDING - PLAYER_RADIUS, localPlayer.y));
+        
+        // Ensure kick state is active while holding space
+        localPlayer.kicking = !!keys[' '];
 
         // 2. Ball Physics
         const ballFriction = 0.985;
@@ -355,34 +358,51 @@
             if (ball.x > WIDTH) score('red');
         }
 
-        // 3. Player - Ball Collision
-        const dx = ball.x - localPlayer.x;
-        const dy = ball.y - localPlayer.y;
-        const dist = Math.sqrt(dx*dx + dy*dy);
-        const minDist = PLAYER_RADIUS + BALL_RADIUS;
+        // 3. Player - Ball Collision (Checking ALL players)
+        let localPlayerTouchedBall = false;
+        const allPlayers = [localPlayer, ...Object.values(players)];
 
-        if (dist < minDist) {
-            const angle = Math.atan2(dy, dx);
-            const force = 2.0;
-            
-            ball.vx = Math.cos(angle) * (Math.abs(localPlayer.vx) + force);
-            ball.vy = Math.sin(angle) * (Math.abs(localPlayer.vy) + force);
-            
-            if (keys[' ']) {
-                ball.vx *= 3;
-                ball.vy *= 3;
-                localPlayer.kicking = true;
-            } else {
-                localPlayer.kicking = false;
+        for (const p of allPlayers) {
+            if (p.x === undefined || p.y === undefined) continue;
+
+            const dx = ball.x - p.x;
+            const dy = ball.y - p.y;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+            const minDist = PLAYER_RADIUS + BALL_RADIUS;
+
+            if (dist < minDist) {
+                const angle = Math.atan2(dy, dx);
+                const force = 2.0;
+                
+                // Account for network player velocity if available, else assume 0
+                const pvx = p.vx || 0;
+                const pvy = p.vy || 0;
+                
+                ball.vx = Math.cos(angle) * (Math.abs(pvx) + force);
+                ball.vy = Math.sin(angle) * (Math.abs(pvy) + force);
+                
+                if (p.kicking) {
+                    ball.vx *= 3;
+                    ball.vy *= 3;
+                }
+                
+                const overlap = minDist - dist;
+                ball.x += Math.cos(angle) * overlap;
+                ball.y += Math.sin(angle) * overlap;
+
+                // Only take network authority if the local player is the one touching it
+                if (p === localPlayer) {
+                    localPlayerTouchedBall = true;
+                }
             }
-            
-            const overlap = minDist - dist;
-            ball.x += Math.cos(angle) * overlap;
-            ball.y += Math.sin(angle) * overlap;
+        }
 
+        // If WE hit the ball, tell the server immediately
+        if (localPlayerTouchedBall) {
             updateBallOnServer();
         }
 
+        // Periodic state sync for other players
         if (Date.now() - localPlayer.lastUpdate > 50) {
             savePlayerState();
             localPlayer.lastUpdate = Date.now();
@@ -502,11 +522,18 @@
     }
 
     // --- Inputs ---
-    window.addEventListener('keydown', e => keys[e.key] = true);
+    window.addEventListener('keydown', e => {
+        if (!keys[e.key]) {
+            keys[e.key] = true;
+            // Instantly show kicking aura to others
+            if (e.key === ' ' && currentRoom) savePlayerState(); 
+        }
+    });
+    
     window.addEventListener('keyup', e => {
         keys[e.key] = false;
         if(e.key === ' ') {
-            localPlayer.kicking = false;
+            // Instantly remove kicking aura for others
             if(currentRoom) savePlayerState();
         }
     });
