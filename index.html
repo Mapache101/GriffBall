@@ -251,19 +251,24 @@
 
         // Listen for players in this specific room
         const playersCol = collection(db, 'artifacts', appId, 'public', 'data', `room_${currentRoom}_players`);
+        
         unsubPlayers = onSnapshot(playersCol, (snapshot) => {
-            snapshot.docChanges().forEach(change => {
-                if (change.type === "removed") {
-                    delete players[change.doc.id];
-                } else {
-                    const data = change.doc.data();
-                    if (change.doc.id !== user.uid) {
-                        players[change.doc.id] = data;
-                    }
+            // Rebuild the players dictionary completely on every update 
+            // to avoid missing fast-paced docChanges() events
+            const updatedPlayers = {};
+            
+            snapshot.docs.forEach(doc => {
+                if (doc.id !== user.uid) {
+                    updatedPlayers[doc.id] = doc.data();
                 }
             });
-            document.getElementById('player-count').innerText = snapshot.size;
-        }, (err) => console.error(err));
+            
+            players = updatedPlayers;
+            
+            const countDisplay = document.getElementById('player-count');
+            if(countDisplay) countDisplay.innerText = snapshot.size;
+            
+        }, (err) => console.error("Player Sync Error:", err));
 
         // Listen for room game state (ball, score)
         const gameDoc = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', currentRoom);
@@ -288,14 +293,23 @@
                     window.leaveRoom();
                 }
             }
-        }, (err) => console.error(err));
+        }, (err) => console.error("Game Sync Error:", err));
     }
 
     async function savePlayerState() {
         if (!user || !currentRoom) return;
         const playerRef = doc(db, 'artifacts', appId, 'public', 'data', `room_${currentRoom}_players`, user.uid);
+        
+        // Explicitly map out properties to prevent undefined values
         await setDoc(playerRef, {
-            ...localPlayer,
+            id: user.uid,
+            name: localPlayer.name,
+            team: localPlayer.team,
+            x: localPlayer.x,
+            y: localPlayer.y,
+            vx: localPlayer.vx,
+            vy: localPlayer.vy,
+            kicking: localPlayer.kicking,
             lastSeen: serverTimestamp()
         }, { merge: true });
     }
@@ -363,7 +377,7 @@
         const allPlayers = [localPlayer, ...Object.values(players)];
 
         for (const p of allPlayers) {
-            if (p.x === undefined || p.y === undefined) continue;
+            if (typeof p.x !== 'number' || typeof p.y !== 'number') continue;
 
             const dx = ball.x - p.x;
             const dy = ball.y - p.y;
@@ -402,8 +416,8 @@
             updateBallOnServer();
         }
 
-        // Periodic state sync for other players
-        if (Date.now() - localPlayer.lastUpdate > 50) {
+        // Periodic state sync for other players (throttled slightly to prevent rapid-fire dropping)
+        if (Date.now() - localPlayer.lastUpdate > 60) {
             savePlayerState();
             localPlayer.lastUpdate = Date.now();
         }
@@ -483,7 +497,9 @@
     }
 
     function drawDisc(p, isLocal = false) {
-        if(p.x === undefined || p.y === undefined) return;
+        // Strict rendering guard to prevent silently failing canvas arcs
+        if (typeof p.x !== 'number' || typeof p.y !== 'number' || isNaN(p.x) || isNaN(p.y)) return;
+        
         const color = p.team === 'red' ? '#ef4444' : '#3b82f6';
         ctx.fillStyle = color;
         ctx.beginPath();
@@ -507,7 +523,7 @@
         ctx.fillStyle = 'white';
         ctx.font = 'bold 12px sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText(p.name, p.x, p.y + PLAYER_RADIUS + 15);
+        ctx.fillText(p.name || "Player", p.x, p.y + PLAYER_RADIUS + 15);
     }
 
     function updateScoreUI() {
