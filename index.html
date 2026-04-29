@@ -1,573 +1,500 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="scroll-smooth">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Multiplayer Soccer Arena</title>
+    <title>SCISMUN - Santa Cruz International School Model United Nations</title>
+    
+    <!-- Favicon -->
+    <link rel="icon" href="image_7e68b0.jpg" type="image/jpeg">
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Merriweather:ital,wght@0,300;0,400;0,700;1,400&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        body { background-color: #2a2a2a; color: white; overflow: hidden; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-        canvas { 
-            background: #4a6741; 
-            border: 8px solid #3d3d3d; 
-            border-radius: 12px;
-            display: block;
-            margin: 0 auto;
-            image-rendering: pixelated;
+    
+    <!-- Tailwind Config for Custom Theme -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        mun: {
+                            blue: '#0055A4', // Classic UN-style blue
+                            dark: '#0A192F', // Deep navy for text/footer
+                            gold: '#D4AF37', // Gold accent
+                            light: '#F3F4F6' // Light gray background
+                        }
+                    },
+                    fontFamily: {
+                        serif: ['Merriweather', 'serif'],
+                        sans: ['Inter', 'sans-serif'],
+                    }
+                }
+            }
         }
-        .ui-panel { background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); }
+    </script>
+
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+        /* Custom Styles for Polish */
+        .glass-nav {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+        }
+        .hero-pattern {
+            background-image: linear-gradient(rgba(10, 25, 47, 0.7), rgba(0, 85, 164, 0.8)), url('https://images.unsplash.com/photo-1528605105345-5344ea20e269?q=80&w=2070&auto=format&fit=crop');
+            background-size: cover;
+            background-position: center;
+            background-attachment: fixed;
+        }
+        .card-hover {
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        .card-hover:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
     </style>
 </head>
-<body class="flex flex-col items-center justify-center min-h-screen">
+<body class="font-sans text-gray-800 bg-mun-light antialiased selection:bg-mun-gold selection:text-white">
 
-    <div id="lobby" class="fixed inset-0 z-50 flex items-center justify-center ui-panel">
-        <div class="bg-zinc-800 p-8 rounded-xl shadow-2xl border border-zinc-700 w-96 text-center relative">
-            <h1 class="text-3xl font-bold mb-2 text-green-400">Soccer Arena</h1>
-            <div id="auth-error" class="text-red-400 text-xs mb-4 hidden bg-red-900/30 p-2 rounded">Error connecting. Make sure Anonymous Auth is enabled.</div>
+    <!-- Navigation -->
+    <nav class="fixed w-full z-50 glass-nav border-b border-gray-200 transition-all duration-300" id="navbar">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-20">
+                <!-- Logo -->
+                <div class="flex-shrink-0 flex items-center gap-3">
+                    <img src="image_7e68b0.jpg" alt="SCISMUN Logo" class="w-12 h-12 rounded-full shadow-lg border border-gray-200 object-cover">
+                    <span class="font-serif font-bold text-2xl text-mun-dark tracking-tight">SCISMUN</span>
+                </div>
+
+                <!-- Desktop Menu -->
+                <div class="hidden md:flex items-center space-x-8">
+                    <a href="#home" class="text-gray-600 hover:text-mun-blue font-medium transition-colors">Home</a>
+                    <a href="#about" class="text-gray-600 hover:text-mun-blue font-medium transition-colors">About</a>
+                    <a href="#committees" class="text-gray-600 hover:text-mun-blue font-medium transition-colors">Committees</a>
+                    <a href="#schedule" class="text-gray-600 hover:text-mun-blue font-medium transition-colors">Schedule</a>
+                    <a href="#register" class="bg-mun-blue hover:bg-blue-700 text-white px-6 py-2.5 rounded-full font-medium transition-colors shadow-md hover:shadow-lg">Register Now</a>
+                </div>
+
+                <!-- Mobile Menu Button -->
+                <div class="md:hidden flex items-center">
+                    <button id="mobile-menu-btn" class="text-gray-600 hover:text-mun-blue focus:outline-none p-2">
+                        <i data-lucide="menu" class="w-6 h-6"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Mobile Menu Panel -->
+        <div id="mobile-menu" class="hidden md:hidden bg-white border-t border-gray-100 absolute w-full shadow-xl">
+            <div class="px-4 pt-2 pb-6 space-y-2 shadow-inner">
+                <a href="#home" class="block px-3 py-3 rounded-md text-base font-medium text-gray-700 hover:text-mun-blue hover:bg-gray-50 mobile-link">Home</a>
+                <a href="#about" class="block px-3 py-3 rounded-md text-base font-medium text-gray-700 hover:text-mun-blue hover:bg-gray-50 mobile-link">About</a>
+                <a href="#committees" class="block px-3 py-3 rounded-md text-base font-medium text-gray-700 hover:text-mun-blue hover:bg-gray-50 mobile-link">Committees</a>
+                <a href="#schedule" class="block px-3 py-3 rounded-md text-base font-medium text-gray-700 hover:text-mun-blue hover:bg-gray-50 mobile-link">Schedule</a>
+                <a href="#register" class="block px-3 py-3 mt-4 text-center rounded-md text-base font-medium bg-mun-blue text-white hover:bg-blue-700 mobile-link">Register Now</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section id="home" class="relative pt-32 pb-20 lg:pt-48 lg:pb-32 hero-pattern min-h-[90vh] flex items-center">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 text-center">
+            <span class="inline-block py-1 px-3 rounded-full bg-white/20 backdrop-blur-sm text-white text-sm font-semibold tracking-wider mb-6 border border-white/30">
+                SANTA CRUZ INTERNATIONAL SCHOOL
+            </span>
+            <h1 class="text-4xl md:text-6xl lg:text-7xl font-serif font-bold text-white mb-6 leading-tight drop-shadow-lg">
+                SCISMUN <br class="hidden md:block"/> Beyond Borders
+            </h1>
+            <p class="mt-4 text-xl md:text-2xl text-gray-200 max-w-3xl mx-auto font-light mb-10 drop-shadow">
+                Welcome to the Third Annual SCIS Model United Nations - where dialogue transcends borders, challenges meet collaboration, and global solutions begin.
+            </p>
+            <div class="flex flex-col sm:flex-row justify-center gap-4">
+                <a href="#register" class="bg-mun-gold hover:bg-yellow-500 text-mun-dark px-8 py-4 rounded-full font-bold text-lg transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-1">
+                    SCISMUN Countdown
+                </a>
+                <a href="#committees" class="bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/50 text-white px-8 py-4 rounded-full font-bold text-lg transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-1">
+                    Explore Committees
+                </a>
+            </div>
             
-            <div id="step-1">
-                <input id="nickname" type="text" placeholder="Enter Nickname" maxlength="12" class="w-full p-3 mb-4 rounded bg-zinc-900 border border-zinc-600 focus:outline-none focus:border-green-500 text-white">
-                <div class="flex gap-2 mb-4">
-                    <button onclick="createRoom()" class="flex-1 p-3 bg-emerald-600 hover:bg-emerald-500 rounded font-bold transition">Create Match</button>
+            <div class="mt-16 grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto bg-white/10 backdrop-blur-md rounded-2xl p-6 border border-white/20">
+                <div class="text-white flex flex-col items-center">
+                    <i data-lucide="calendar" class="w-8 h-8 mb-2 text-mun-gold"></i>
+                    <span class="font-bold text-lg">October 15-17, 2026</span>
+                    <span class="text-sm text-gray-300">Three Days of Debate</span>
                 </div>
-                <div class="flex gap-2 mb-4">
-                    <input id="room-code-input" type="text" placeholder="Room Code" maxlength="4" class="w-1/2 p-3 rounded bg-zinc-900 border border-zinc-600 focus:outline-none focus:border-green-500 text-white text-center uppercase">
-                    <button onclick="joinRoom()" class="w-1/2 p-3 bg-indigo-600 hover:bg-indigo-500 rounded font-bold transition">Join Match</button>
+                <div class="text-white flex flex-col items-center border-t md:border-t-0 md:border-l border-white/20 pt-4 md:pt-0">
+                    <i data-lucide="map-pin" class="w-8 h-8 mb-2 text-mun-gold"></i>
+                    <span class="font-bold text-lg">SCIS Campus</span>
+                    <span class="text-sm text-gray-300">Santa Cruz, Bolivia</span>
+                </div>
+                <div class="text-white flex flex-col items-center border-t md:border-t-0 md:border-l border-white/20 pt-4 md:pt-0">
+                    <i data-lucide="users" class="w-8 h-8 mb-2 text-mun-gold"></i>
+                    <span class="font-bold text-lg">300+ Delegates</span>
+                    <span class="text-sm text-gray-300">From Across the Region</span>
                 </div>
             </div>
+        </div>
+    </section>
 
-            <div id="step-2" class="hidden">
-                <h2 class="text-xl text-white mb-4">Room: <span id="display-room-code" class="text-yellow-400 font-mono font-bold tracking-widest"></span></h2>
-                <div class="flex gap-4 mb-6">
-                    <button onclick="joinTeam('red')" class="flex-1 p-4 bg-red-600 hover:bg-red-500 rounded font-bold transition">Red Team</button>
-                    <button onclick="joinTeam('blue')" class="flex-1 p-4 bg-blue-600 hover:bg-blue-500 rounded font-bold transition">Blue Team</button>
+    <!-- Welcome / About Section -->
+    <section id="about" class="py-20 bg-white">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+                <div>
+                    <h2 class="text-sm font-bold tracking-widest text-mun-blue uppercase mb-2">Welcome Address</h2>
+                    <h3 class="text-3xl md:text-4xl font-serif font-bold text-mun-dark mb-6">Letter from the Secretary-General</h3>
+                    <div class="prose prose-lg text-gray-600">
+                        <p class="mb-4">
+                            Honorable Delegates, Respected Directors, and Distinguished Guests,
+                        </p>
+                        <p class="mb-4">
+                            It is with immense pleasure and profound honor that I welcome you to the annual Santa Cruz International School Model United Nations (SCISMUN). In an era defined by rapid change and complex global challenges, the need for diplomatic dialogue and innovative problem-solving has never been greater.
+                        </p>
+                        <p class="mb-4">
+                            This year's theme focuses on sustainable development and global cooperation. We have meticulously crafted committees that will challenge you to think critically, negotiate passionately, and draft resolutions that reflect a deep understanding of international relations.
+                        </p>
+                        <p class="mb-6">
+                            Whether you are a seasoned delegate or attending your very first conference, SCISMUN promises an environment of rigorous debate, cultural exchange, and lasting friendships. I look forward to witnessing your brilliance in committee sessions.
+                        </p>
+                        <div class="flex items-center gap-4 mt-8 pt-6 border-t border-gray-100">
+                            <div class="w-16 h-16 bg-gray-200 rounded-full flex items-center justify-center text-gray-400 overflow-hidden">
+                                <i data-lucide="user" class="w-8 h-8"></i>
+                            </div>
+                            <div>
+                                <h4 class="font-bold text-mun-dark text-lg">[Name Placeholder]</h4>
+                                <p class="text-mun-blue font-medium text-sm">Secretary-General, SCISMUN</p>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                <button onclick="cancelJoin()" class="text-zinc-500 text-sm hover:text-white transition">Cancel</button>
+                <div class="relative">
+                    <div class="absolute inset-0 bg-mun-blue transform translate-x-4 translate-y-4 rounded-2xl opacity-20"></div>
+                    <img src="https://images.unsplash.com/photo-1577962917302-cd874c4e31d2?q=80&w=1974&auto=format&fit=crop" alt="Students debating" class="relative rounded-2xl shadow-xl w-full object-cover h-[500px] z-10">
+                    <div class="absolute -bottom-6 -left-6 bg-white p-6 rounded-xl shadow-xl z-20 max-w-xs">
+                        <div class="flex items-center gap-3 mb-2">
+                            <div class="w-10 h-10 bg-mun-gold rounded-full flex items-center justify-center text-white">
+                                <i data-lucide="award" class="w-5 h-5"></i>
+                            </div>
+                            <span class="font-bold text-mun-dark">Excellence in Debate</span>
+                        </div>
+                        <p class="text-sm text-gray-500">Fostering critical thinking and public speaking skills since our inception.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Committees Section -->
+    <section id="committees" class="py-20 bg-gray-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center max-w-3xl mx-auto mb-16">
+                <h2 class="text-sm font-bold tracking-widest text-mun-blue uppercase mb-2">The Forums of Debate</h2>
+                <h3 class="text-3xl md:text-4xl font-serif font-bold text-mun-dark mb-4">Our Committees</h3>
+                <p class="text-lg text-gray-600">
+                    Explore the diverse range of committees offered at SCISMUN this year. Each council has been selected to address pressing global issues.
+                </p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                <!-- Committee Card 1 -->
+                <div class="bg-white rounded-2xl overflow-hidden border border-gray-100 card-hover">
+                    <div class="h-48 bg-mun-blue relative overflow-hidden flex items-center justify-center">
+                        <i data-lucide="globe" class="w-24 h-24 text-white opacity-20 absolute"></i>
+                        <h4 class="text-3xl font-serif font-bold text-white relative z-10">GA</h4>
+                    </div>
+                    <div class="p-8">
+                        <div class="flex justify-between items-start mb-4">
+                            <h5 class="text-xl font-bold text-mun-dark">General Assembly</h5>
+                            <span class="bg-blue-100 text-mun-blue text-xs font-bold px-2.5 py-1 rounded-full">Beginner</span>
+                        </div>
+                        <p class="text-gray-600 text-sm mb-6 line-clamp-3">
+                            The main deliberative, policymaking and representative organ of the UN. Topics include climate action frameworks and international security protocols.
+                        </p>
+                        <a href="#" class="text-mun-blue font-semibold hover:text-blue-800 flex items-center gap-1 transition-colors group">
+                            Read Background Guide 
+                            <i data-lucide="arrow-right" class="w-4 h-4 transform group-hover:translate-x-1 transition-transform"></i>
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Committee Card 2 -->
+                <div class="bg-white rounded-2xl overflow-hidden border border-gray-100 card-hover">
+                    <div class="h-48 bg-mun-dark relative overflow-hidden flex items-center justify-center">
+                        <i data-lucide="shield" class="w-24 h-24 text-white opacity-20 absolute"></i>
+                        <h4 class="text-3xl font-serif font-bold text-white relative z-10">UNSC</h4>
+                    </div>
+                    <div class="p-8">
+                        <div class="flex justify-between items-start mb-4">
+                            <h5 class="text-xl font-bold text-mun-dark">Security Council</h5>
+                            <span class="bg-red-100 text-red-700 text-xs font-bold px-2.5 py-1 rounded-full">Advanced</span>
+                        </div>
+                        <p class="text-gray-600 text-sm mb-6 line-clamp-3">
+                            Charged with ensuring international peace and security. Delegates must be prepared for fast-paced crisis updates and intense diplomatic negotiations.
+                        </p>
+                        <a href="#" class="text-mun-blue font-semibold hover:text-blue-800 flex items-center gap-1 transition-colors group">
+                            Read Background Guide 
+                            <i data-lucide="arrow-right" class="w-4 h-4 transform group-hover:translate-x-1 transition-transform"></i>
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Committee Card 3 -->
+                <div class="bg-white rounded-2xl overflow-hidden border border-gray-100 card-hover">
+                    <div class="h-48 bg-teal-700 relative overflow-hidden flex items-center justify-center">
+                        <i data-lucide="heart" class="w-24 h-24 text-white opacity-20 absolute"></i>
+                        <h4 class="text-3xl font-serif font-bold text-white relative z-10">WHO</h4>
+                    </div>
+                    <div class="p-8">
+                        <div class="flex justify-between items-start mb-4">
+                            <h5 class="text-xl font-bold text-mun-dark">World Health Org.</h5>
+                            <span class="bg-yellow-100 text-yellow-700 text-xs font-bold px-2.5 py-1 rounded-full">Intermediate</span>
+                        </div>
+                        <p class="text-gray-600 text-sm mb-6 line-clamp-3">
+                            Directing and coordinating authority on international health within the UN's system. Addressing post-pandemic recovery and healthcare access.
+                        </p>
+                        <a href="#" class="text-mun-blue font-semibold hover:text-blue-800 flex items-center gap-1 transition-colors group">
+                            Read Background Guide 
+                            <i data-lucide="arrow-right" class="w-4 h-4 transform group-hover:translate-x-1 transition-transform"></i>
+                        </a>
+                    </div>
+                </div>
             </div>
             
-            <p class="text-zinc-400 text-sm mt-4">WASD/Arrows to Move • Space to Kick</p>
-        </div>
-    </div>
-
-    <div class="relative">
-        <div class="absolute top-4 left-0 right-0 flex justify-center items-center pointer-events-none px-10">
-            <div class="ui-panel px-6 py-2 rounded-full flex gap-8 items-center border border-zinc-600">
-                <div class="flex items-center gap-3">
-                    <div class="w-3 h-3 bg-red-500 rounded-full"></div>
-                    <span id="score-red" class="text-2xl font-black">0</span>
-                </div>
-                <div class="text-zinc-500 font-bold">-</div>
-                <div class="flex items-center gap-3">
-                    <span id="score-blue" class="text-2xl font-black">0</span>
-                    <div class="w-3 h-3 bg-blue-500 rounded-full"></div>
+            <!-- Note for User -->
+            <div class="mt-12 bg-blue-50 border-l-4 border-mun-blue p-4 rounded-r-lg max-w-3xl mx-auto">
+                <div class="flex items-start">
+                    <i data-lucide="info" class="w-5 h-5 text-mun-blue mt-0.5 mr-3 flex-shrink-0"></i>
+                    <p class="text-sm text-blue-800">
+                        <strong>Note for Editor:</strong> Please provide the content from your Word document so I can update these committee names, descriptions, and difficulty levels to match your exact SCISMUN lineup.
+                    </p>
                 </div>
             </div>
         </div>
-        
-        <canvas id="gameCanvas"></canvas>
-        
-        <div id="goal-msg" class="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-7xl font-black text-yellow-400 hidden pointer-events-none drop-shadow-lg italic">
-            GOAL!
+    </section>
+
+    <!-- Schedule Section -->
+    <section id="schedule" class="py-20 bg-white">
+        <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center mb-16">
+                <h2 class="text-sm font-bold tracking-widest text-mun-blue uppercase mb-2">Itinerary</h2>
+                <h3 class="text-3xl md:text-4xl font-serif font-bold text-mun-dark">Conference Schedule</h3>
+            </div>
+
+            <div class="relative border-l-2 border-gray-200 ml-3 md:ml-6">
+                
+                <!-- Day 1 -->
+                <div class="mb-10 relative">
+                    <div class="absolute w-4 h-4 bg-mun-blue rounded-full -left-[9px] top-1 border-4 border-white shadow"></div>
+                    <div class="pl-8">
+                        <h4 class="text-xl font-bold text-mun-dark mb-4 bg-gray-50 inline-block px-4 py-1 rounded-lg border border-gray-100">Day 1: Friday</h4>
+                        
+                        <div class="space-y-6">
+                            <div class="flex flex-col md:flex-row md:items-start gap-2 md:gap-6 group">
+                                <div class="text-mun-blue font-bold min-w-[120px]">14:00 - 15:30</div>
+                                <div>
+                                    <h5 class="text-lg font-semibold text-gray-800 group-hover:text-mun-blue transition-colors">Registration & Check-in</h5>
+                                    <p class="text-gray-500 text-sm">Main Auditorium Lobby. Delegates receive placards and materials.</p>
+                                </div>
+                            </div>
+                            
+                            <div class="flex flex-col md:flex-row md:items-start gap-2 md:gap-6 group">
+                                <div class="text-mun-blue font-bold min-w-[120px]">16:00 - 17:30</div>
+                                <div>
+                                    <h5 class="text-lg font-semibold text-gray-800 group-hover:text-mun-blue transition-colors">Opening Ceremony</h5>
+                                    <p class="text-gray-500 text-sm">Keynote speech, Secretariat introduction, and official opening gavel.</p>
+                                </div>
+                            </div>
+
+                            <div class="flex flex-col md:flex-row md:items-start gap-2 md:gap-6 group">
+                                <div class="text-mun-blue font-bold min-w-[120px]">18:00 - 20:00</div>
+                                <div>
+                                    <h5 class="text-lg font-semibold text-gray-800 group-hover:text-mun-blue transition-colors">Committee Session I</h5>
+                                    <p class="text-gray-500 text-sm">Roll call, setting the agenda, and opening statements.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Day 2 -->
+                <div class="mb-10 relative">
+                    <div class="absolute w-4 h-4 bg-mun-gold rounded-full -left-[9px] top-1 border-4 border-white shadow"></div>
+                    <div class="pl-8">
+                        <h4 class="text-xl font-bold text-mun-dark mb-4 bg-gray-50 inline-block px-4 py-1 rounded-lg border border-gray-100">Day 2: Saturday</h4>
+                        
+                        <div class="space-y-6">
+                            <div class="flex flex-col md:flex-row md:items-start gap-2 md:gap-6 group">
+                                <div class="text-mun-blue font-bold min-w-[120px]">09:00 - 12:30</div>
+                                <div>
+                                    <h5 class="text-lg font-semibold text-gray-800 group-hover:text-mun-blue transition-colors">Committee Session II</h5>
+                                    <p class="text-gray-500 text-sm">General speakers list and unmoderated caucuses.</p>
+                                </div>
+                            </div>
+                            
+                            <div class="flex flex-col md:flex-row md:items-start gap-2 md:gap-6 group">
+                                <div class="text-mun-blue font-bold min-w-[120px]">12:30 - 14:00</div>
+                                <div>
+                                    <h5 class="text-lg font-semibold text-gray-800 group-hover:text-mun-blue transition-colors">Lunch Break</h5>
+                                    <p class="text-gray-500 text-sm">Lunch provided in the school cafeteria area.</p>
+                                </div>
+                            </div>
+
+                            <div class="flex flex-col md:flex-row md:items-start gap-2 md:gap-6 group">
+                                <div class="text-mun-blue font-bold min-w-[120px]">14:00 - 18:00</div>
+                                <div>
+                                    <h5 class="text-lg font-semibold text-gray-800 group-hover:text-mun-blue transition-colors">Committee Session III</h5>
+                                    <p class="text-gray-500 text-sm">Drafting working papers and resolutions.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
         </div>
-    </div>
+    </section>
 
-    <div class="mt-4 flex justify-between w-full max-w-[800px] text-zinc-500 text-sm px-2">
-        <div>Players: <span id="player-count">0</span> | Room: <span id="active-room-code" class="text-yellow-400 font-bold">None</span></div>
-        <button onclick="leaveRoom()" class="text-red-400 hover:text-red-300 underline font-bold">Leave Match</button>
-    </div>
-
-<script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-    import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-    import { getFirestore, doc, setDoc, getDoc, deleteDoc, onSnapshot, collection, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-    // --- Config & Init ---
-    const firebaseConfig = {
-        apiKey: "AIzaSyAacDt9YRIKu3_8LTwms70CwnA31WRfMIk",
-        authDomain: "griffball-3eb45.firebaseapp.com",
-        projectId: "griffball-3eb45",
-        storageBucket: "griffball-3eb45.firebasestorage.app",
-        messagingSenderId: "615795790042",
-        appId: "1:615795790042:web:aedeeda9c9914797c955e3"
-    };
-    const app = initializeApp(firebaseConfig);
-    const auth = getAuth(app);
-    const db = getFirestore(app);
-    const appId = typeof __app_id !== 'undefined' ? __app_id : 'griffball-3eb45';
-
-    const canvas = document.getElementById('gameCanvas');
-    const ctx = canvas.getContext('2d');
-    
-    // Field Constants
-    const WIDTH = 800;
-    const HEIGHT = 500;
-    const PADDING = 40;
-    const GOAL_SIZE = 120;
-    const PLAYER_RADIUS = 15;
-    const BALL_RADIUS = 10;
-    
-    canvas.width = WIDTH;
-    canvas.height = HEIGHT;
-
-    // Game State
-    let user = null;
-    let currentRoom = null;
-    let isHost = false;
-    let unsubPlayers = null;
-    let unsubGame = null;
-
-    let localPlayer = {
-        id: null,
-        name: '',
-        team: 'red',
-        x: 0, y: 0,
-        vx: 0, vy: 0,
-        kicking: false,
-        lastUpdate: 0
-    };
-
-    let players = {};
-    let ball = { x: WIDTH/2, y: HEIGHT/2, vx: 0, vy: 0 };
-    let gameState = { scoreRed: 0, scoreBlue: 0, lastGoal: 0 };
-    
-    const keys = {};
-
-    function showError(msg) {
-        const errDiv = document.getElementById('auth-error');
-        errDiv.innerText = msg;
-        errDiv.classList.remove('hidden');
-        setTimeout(() => errDiv.classList.add('hidden'), 4000);
-    }
-
-    // --- Interaction ---
-    window.createRoom = async () => {
-        if (!user) return showError("Still connecting to database...");
-        const code = Math.random().toString(36).substring(2, 6).toUpperCase();
-        currentRoom = code;
-        isHost = true;
+    <!-- Registration Call to Action -->
+    <section id="register" class="py-20 relative overflow-hidden">
+        <!-- Background elements -->
+        <div class="absolute inset-0 bg-mun-dark z-0"></div>
+        <div class="absolute -top-24 -right-24 w-96 h-96 bg-mun-blue rounded-full blur-3xl opacity-50 z-0"></div>
+        <div class="absolute -bottom-24 -left-24 w-96 h-96 bg-mun-gold rounded-full blur-3xl opacity-20 z-0"></div>
         
-        document.getElementById('step-1').classList.add('hidden');
-        document.getElementById('step-2').classList.remove('hidden');
-        document.getElementById('display-room-code').innerText = code;
-        document.getElementById('active-room-code').innerText = code;
+        <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 text-center">
+            <h2 class="text-3xl md:text-5xl font-serif font-bold text-white mb-6">Ready to Take the Floor?</h2>
+            <p class="text-xl text-gray-300 mb-10 max-w-2xl mx-auto">
+                Secure your spot at SCISMUN today. Registration is open for schools and independent delegates.
+            </p>
+            
+            <div class="bg-white/10 backdrop-blur-lg border border-white/20 p-8 rounded-2xl max-w-3xl mx-auto shadow-2xl">
+                <form class="space-y-4 text-left">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-200 mb-1">Full Name</label>
+                            <input type="text" class="w-full px-4 py-3 rounded-lg bg-white/5 border border-white/20 text-white focus:outline-none focus:border-mun-gold focus:ring-1 focus:ring-mun-gold transition-colors" placeholder="John Doe">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-200 mb-1">Email Address</label>
+                            <input type="email" class="w-full px-4 py-3 rounded-lg bg-white/5 border border-white/20 text-white focus:outline-none focus:border-mun-gold focus:ring-1 focus:ring-mun-gold transition-colors" placeholder="john@example.com">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-200 mb-1">School / Institution</label>
+                        <input type="text" class="w-full px-4 py-3 rounded-lg bg-white/5 border border-white/20 text-white focus:outline-none focus:border-mun-gold focus:ring-1 focus:ring-mun-gold transition-colors" placeholder="Santa Cruz International School">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-200 mb-1">Message / Delegation Size</label>
+                        <textarea rows="3" class="w-full px-4 py-3 rounded-lg bg-white/5 border border-white/20 text-white focus:outline-none focus:border-mun-gold focus:ring-1 focus:ring-mun-gold transition-colors" placeholder="Tell us about your delegation..."></textarea>
+                    </div>
+                    <button type="button" class="w-full bg-mun-gold hover:bg-yellow-500 text-mun-dark font-bold text-lg py-4 rounded-lg transition-colors mt-4">
+                        Submit Registration Inquiry
+                    </button>
+                </form>
+            </div>
+        </div>
+    </section>
 
-        // Create room instance in Firestore
-        const gameRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', code);
-        await setDoc(gameRef, {
-            createdAt: serverTimestamp(),
-            host: user.uid,
-            ball: { x: WIDTH/2, y: HEIGHT/2, vx: 0, vy: 0 },
-            scores: { red: 0, blue: 0 }
+    <!-- Footer -->
+    <footer class="bg-gray-900 text-gray-300 py-12 border-t border-gray-800">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
+                
+                <div class="col-span-1 md:col-span-2">
+                    <div class="flex items-center gap-3 mb-4">
+                        <img src="image_7e68b0.jpg" alt="SCISMUN Logo" class="w-10 h-10 rounded-full border border-gray-700 object-cover">
+                        <span class="font-serif font-bold text-xl text-white tracking-tight">SCISMUN</span>
+                    </div>
+                    <p class="text-sm text-gray-400 max-w-sm mb-6">
+                        Empowering the next generation of global leaders through diplomacy, debate, and collaborative problem-solving in Santa Cruz, Bolivia.
+                    </p>
+                    <div class="flex space-x-4">
+                        <a href="#" class="text-gray-400 hover:text-white transition-colors">
+                            <i data-lucide="instagram" class="w-5 h-5"></i>
+                        </a>
+                        <a href="#" class="text-gray-400 hover:text-white transition-colors">
+                            <i data-lucide="facebook" class="w-5 h-5"></i>
+                        </a>
+                        <a href="#" class="text-gray-400 hover:text-white transition-colors">
+                            <i data-lucide="mail" class="w-5 h-5"></i>
+                        </a>
+                    </div>
+                </div>
+
+                <div>
+                    <h4 class="text-white font-bold mb-4 uppercase text-sm tracking-wider">Quick Links</h4>
+                    <ul class="space-y-2 text-sm">
+                        <li><a href="#home" class="hover:text-mun-gold transition-colors">Home</a></li>
+                        <li><a href="#about" class="hover:text-mun-gold transition-colors">About Secretariat</a></li>
+                        <li><a href="#committees" class="hover:text-mun-gold transition-colors">Committees</a></li>
+                        <li><a href="#schedule" class="hover:text-mun-gold transition-colors">Conference Schedule</a></li>
+                        <li><a href="#register" class="hover:text-mun-gold transition-colors">Registration Info</a></li>
+                    </ul>
+                </div>
+
+                <div>
+                    <h4 class="text-white font-bold mb-4 uppercase text-sm tracking-wider">Contact</h4>
+                    <ul class="space-y-3 text-sm">
+                        <li class="flex items-start gap-2">
+                            <i data-lucide="map-pin" class="w-4 h-4 mt-0.5 text-mun-gold flex-shrink-0"></i>
+                            <span>Santa Cruz International School<br/>Santa Cruz de la Sierra, Bolivia</span>
+                        </li>
+                        <li class="flex items-center gap-2">
+                            <i data-lucide="mail" class="w-4 h-4 text-mun-gold flex-shrink-0"></i>
+                            <a href="mailto:info@scismun.org" class="hover:text-white transition-colors">info@scismun.org</a>
+                        </li>
+                    </ul>
+                </div>
+
+            </div>
+            
+            <div class="border-t border-gray-800 mt-12 pt-8 flex flex-col md:flex-row justify-between items-center gap-4 text-xs text-gray-500">
+                <p>&copy; 2026 SCISMUN. All rights reserved.</p>
+                <p>Designed for Santa Cruz International School</p>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Scripts -->
+    <script>
+        // Initialize Lucide Icons
+        lucide.createIcons();
+
+        // Mobile Menu Toggle
+        const btn = document.getElementById('mobile-menu-btn');
+        const menu = document.getElementById('mobile-menu');
+        const mobileLinks = document.querySelectorAll('.mobile-link');
+
+        btn.addEventListener('click', () => {
+            menu.classList.toggle('hidden');
         });
-    };
 
-    window.joinRoom = async () => {
-        if (!user) return showError("Still connecting to database...");
-        const code = document.getElementById('room-code-input').value.trim().toUpperCase();
-        if(!code) return showError("Enter a Room Code");
-        
-        // Check if room instance exists
-        const gameRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', code);
-        const snap = await getDoc(gameRef);
-        if(!snap.exists()) {
-            return showError("Room not found! Check code.");
-        }
-
-        currentRoom = code;
-        isHost = false;
-        document.getElementById('step-1').classList.add('hidden');
-        document.getElementById('step-2').classList.remove('hidden');
-        document.getElementById('display-room-code').innerText = code;
-        document.getElementById('active-room-code').innerText = code;
-    };
-
-    window.cancelJoin = () => {
-        currentRoom = null;
-        isHost = false;
-        document.getElementById('step-1').classList.remove('hidden');
-        document.getElementById('step-2').classList.add('hidden');
-    }
-
-    window.joinTeam = async (team) => {
-        const nick = document.getElementById('nickname').value.trim() || "Player";
-        localPlayer.name = nick;
-        localPlayer.team = team;
-        localPlayer.x = team === 'red' ? 150 : WIDTH - 150;
-        localPlayer.y = HEIGHT / 2;
-        
-        document.getElementById('lobby').style.display = 'none';
-        
-        setupNetworkListeners();
-        await savePlayerState();
-    };
-
-    window.leaveRoom = async () => {
-        if (!currentRoom) return;
-        
-        if (unsubPlayers) unsubPlayers();
-        if (unsubGame) unsubGame();
-        
-        if (user) {
-            // Remove player doc
-            await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', `room_${currentRoom}_players`, user.uid));
-            
-            // If Host, delete the match instance entirely
-            if (isHost) {
-                await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'rooms', currentRoom));
-            }
-        }
-
-        // Reset state & UI
-        currentRoom = null;
-        isHost = false;
-        players = {};
-        document.getElementById('active-room-code').innerText = 'None';
-        document.getElementById('lobby').style.display = 'flex';
-        document.getElementById('step-1').classList.remove('hidden');
-        document.getElementById('step-2').classList.add('hidden');
-        resetPositions();
-    };
-
-    // --- Networking ---
-    async function initAuth() {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-            await signInWithCustomToken(auth, __initial_auth_token);
-        } else {
-            await signInAnonymously(auth);
-        }
-    }
-
-    onAuthStateChanged(auth, (u) => {
-        if (u) {
-            user = u;
-            localPlayer.id = u.uid;
-        } else {
-            showError("Authentication lost.");
-        }
-    });
-
-    function setupNetworkListeners() {
-        if (!user || !currentRoom) return;
-
-        // Listen for players in this specific room
-        const playersCol = collection(db, 'artifacts', appId, 'public', 'data', `room_${currentRoom}_players`);
-        
-        unsubPlayers = onSnapshot(playersCol, (snapshot) => {
-            // Rebuild the players dictionary completely on every update 
-            // to avoid missing fast-paced docChanges() events
-            const updatedPlayers = {};
-            
-            snapshot.docs.forEach(doc => {
-                if (doc.id !== user.uid) {
-                    updatedPlayers[doc.id] = doc.data();
-                }
+        // Close mobile menu on link click
+        mobileLinks.forEach(link => {
+            link.addEventListener('click', () => {
+                menu.classList.add('hidden');
             });
-            
-            players = updatedPlayers;
-            
-            const countDisplay = document.getElementById('player-count');
-            if(countDisplay) countDisplay.innerText = snapshot.size;
-            
-        }, (err) => console.error("Player Sync Error:", err));
-
-        // Listen for room game state (ball, score)
-        const gameDoc = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', currentRoom);
-        unsubGame = onSnapshot(gameDoc, (docSnap) => {
-            if (docSnap.exists()) {
-                const data = docSnap.data();
-                if (data.ball) {
-                    ball.x = data.ball.x;
-                    ball.y = data.ball.y;
-                    ball.vx = data.ball.vx;
-                    ball.vy = data.ball.vy;
-                }
-                if (data.scores) {
-                    gameState.scoreRed = data.scores.red;
-                    gameState.scoreBlue = data.scores.blue;
-                    updateScoreUI();
-                }
-            } else {
-                // Room document was deleted (Host left the match)
-                if (!isHost && currentRoom) {
-                    showError("The host ended the match.");
-                    window.leaveRoom();
-                }
-            }
-        }, (err) => console.error("Game Sync Error:", err));
-    }
-
-    async function savePlayerState() {
-        if (!user || !currentRoom) return;
-        const playerRef = doc(db, 'artifacts', appId, 'public', 'data', `room_${currentRoom}_players`, user.uid);
-        
-        // Explicitly map out properties to prevent undefined values
-        await setDoc(playerRef, {
-            id: user.uid,
-            name: localPlayer.name,
-            team: localPlayer.team,
-            x: localPlayer.x,
-            y: localPlayer.y,
-            vx: localPlayer.vx,
-            vy: localPlayer.vy,
-            kicking: localPlayer.kicking,
-            lastSeen: serverTimestamp()
-        }, { merge: true });
-    }
-
-    async function updateBallOnServer() {
-        if (!user || !currentRoom) return;
-        const gameRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', currentRoom);
-        await setDoc(gameRef, {
-            ball: { x: ball.x, y: ball.y, vx: ball.vx, vy: ball.vy },
-            scores: { red: gameState.scoreRed, blue: gameState.scoreBlue }
-        }, { merge: true });
-    }
-
-    // --- Physics ---
-    function updatePhysics() {
-        // Only run physics if actively in a room and pitch is shown
-        if (!currentRoom || document.getElementById('lobby').style.display !== 'none') return;
-
-        // 1. Local Player Movement
-        const accel = 0.5;
-        const friction = 0.94;
-        
-        if (keys['ArrowUp'] || keys['w']) localPlayer.vy -= accel;
-        if (keys['ArrowDown'] || keys['s']) localPlayer.vy += accel;
-        if (keys['ArrowLeft'] || keys['a']) localPlayer.vx -= accel;
-        if (keys['ArrowRight'] || keys['d']) localPlayer.vx += accel;
-
-        localPlayer.vx *= friction;
-        localPlayer.vy *= friction;
-        localPlayer.x += localPlayer.vx;
-        localPlayer.y += localPlayer.vy;
-
-        localPlayer.x = Math.max(PADDING + PLAYER_RADIUS, Math.min(WIDTH - PADDING - PLAYER_RADIUS, localPlayer.x));
-        localPlayer.y = Math.max(PADDING + PLAYER_RADIUS, Math.min(HEIGHT - PADDING - PLAYER_RADIUS, localPlayer.y));
-        
-        // Ensure kick state is active while holding space
-        localPlayer.kicking = !!keys[' '];
-
-        // 2. Ball Physics
-        const ballFriction = 0.985;
-        ball.vx *= ballFriction;
-        ball.vy *= ballFriction;
-        ball.x += ball.vx;
-        ball.y += ball.vy;
-
-        if (ball.y < PADDING + BALL_RADIUS || ball.y > HEIGHT - PADDING - BALL_RADIUS) {
-            ball.vy *= -0.7;
-            ball.y = ball.y < HEIGHT / 2 ? PADDING + BALL_RADIUS : HEIGHT - PADDING - BALL_RADIUS;
-        }
-
-        const inGoalRange = (ball.y > HEIGHT/2 - GOAL_SIZE/2 && ball.y < HEIGHT/2 + GOAL_SIZE/2);
-        
-        if (!inGoalRange) {
-            if (ball.x < PADDING + BALL_RADIUS || ball.x > WIDTH - PADDING - BALL_RADIUS) {
-                ball.vx *= -0.7;
-                ball.x = ball.x < WIDTH / 2 ? PADDING + BALL_RADIUS : WIDTH - PADDING - BALL_RADIUS;
-            }
-        } else {
-            if (ball.x < 0) score('blue');
-            if (ball.x > WIDTH) score('red');
-        }
-
-        // 3. Player - Ball Collision (Checking ALL players)
-        let localPlayerTouchedBall = false;
-        const allPlayers = [localPlayer, ...Object.values(players)];
-
-        for (const p of allPlayers) {
-            if (typeof p.x !== 'number' || typeof p.y !== 'number') continue;
-
-            const dx = ball.x - p.x;
-            const dy = ball.y - p.y;
-            const dist = Math.sqrt(dx*dx + dy*dy);
-            const minDist = PLAYER_RADIUS + BALL_RADIUS;
-
-            if (dist < minDist) {
-                const angle = Math.atan2(dy, dx);
-                const force = 2.0;
-                
-                // Account for network player velocity if available, else assume 0
-                const pvx = p.vx || 0;
-                const pvy = p.vy || 0;
-                
-                ball.vx = Math.cos(angle) * (Math.abs(pvx) + force);
-                ball.vy = Math.sin(angle) * (Math.abs(pvy) + force);
-                
-                if (p.kicking) {
-                    ball.vx *= 3;
-                    ball.vy *= 3;
-                }
-                
-                const overlap = minDist - dist;
-                ball.x += Math.cos(angle) * overlap;
-                ball.y += Math.sin(angle) * overlap;
-
-                // Only take network authority if the local player is the one touching it
-                if (p === localPlayer) {
-                    localPlayerTouchedBall = true;
-                }
-            }
-        }
-
-        // If WE hit the ball, tell the server immediately
-        if (localPlayerTouchedBall) {
-            updateBallOnServer();
-        }
-
-        // Periodic state sync for other players (throttled slightly to prevent rapid-fire dropping)
-        if (Date.now() - localPlayer.lastUpdate > 60) {
-            savePlayerState();
-            localPlayer.lastUpdate = Date.now();
-        }
-    }
-
-    function score(team) {
-        if (!isHost) return; // Only host handles goal events
-        if (Date.now() - gameState.lastGoal < 3000) return;
-        
-        if (team === 'red') gameState.scoreRed++;
-        else gameState.scoreBlue++;
-        
-        gameState.lastGoal = Date.now();
-        showGoalUI();
-        resetPositions();
-        updateBallOnServer();
-    }
-
-    function resetPositions() {
-        ball = { x: WIDTH/2, y: HEIGHT/2, vx: 0, vy: 0 };
-        localPlayer.vx = 0; localPlayer.vy = 0;
-        localPlayer.x = localPlayer.team === 'red' ? 150 : WIDTH - 150;
-        localPlayer.y = HEIGHT / 2;
-        if(isHost && currentRoom) updateBallOnServer();
-    }
-
-    // --- Rendering ---
-    function draw() {
-        ctx.clearRect(0, 0, WIDTH, HEIGHT);
-        
-        ctx.fillStyle = '#4a6741';
-        ctx.fillRect(0, 0, WIDTH, HEIGHT);
-        
-        ctx.strokeStyle = 'rgba(255,255,255,0.2)';
-        ctx.lineWidth = 40;
-        for(let i=0; i<WIDTH; i+=80) {
-            if((i/80)%2 === 0) ctx.fillRect(i, 0, 40, HEIGHT);
-        }
-
-        ctx.strokeStyle = 'white';
-        ctx.lineWidth = 3;
-        ctx.strokeRect(PADDING, PADDING, WIDTH - 2*PADDING, HEIGHT - 2*PADDING);
-        
-        ctx.beginPath();
-        ctx.moveTo(WIDTH/2, PADDING);
-        ctx.lineTo(WIDTH/2, HEIGHT-PADDING);
-        ctx.stroke();
-
-        ctx.beginPath();
-        ctx.arc(WIDTH/2, HEIGHT/2, 60, 0, Math.PI*2);
-        ctx.stroke();
-
-        ctx.strokeStyle = 'red';
-        ctx.strokeRect(0, HEIGHT/2 - GOAL_SIZE/2, PADDING, GOAL_SIZE);
-        ctx.strokeStyle = 'blue';
-        ctx.strokeRect(WIDTH - PADDING, HEIGHT/2 - GOAL_SIZE/2, PADDING, GOAL_SIZE);
-
-        Object.values(players).forEach(p => drawDisc(p));
-        
-        // Only draw local player if they successfully joined the room
-        if (currentRoom && document.getElementById('lobby').style.display === 'none') {
-            drawDisc(localPlayer, true);
-        }
-
-        ctx.fillStyle = 'white';
-        ctx.shadowBlur = 10;
-        ctx.shadowColor = 'rgba(0,0,0,0.5)';
-        ctx.beginPath();
-        ctx.arc(ball.x, ball.y, BALL_RADIUS, 0, Math.PI*2);
-        ctx.fill();
-        ctx.shadowBlur = 0;
-
-        requestAnimationFrame(() => {
-            updatePhysics();
-            draw();
         });
-    }
 
-    function drawDisc(p, isLocal = false) {
-        // Strict rendering guard to prevent silently failing canvas arcs
-        if (typeof p.x !== 'number' || typeof p.y !== 'number' || isNaN(p.x) || isNaN(p.y)) return;
-        
-        const color = p.team === 'red' ? '#ef4444' : '#3b82f6';
-        ctx.fillStyle = color;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, PLAYER_RADIUS, 0, Math.PI*2);
-        ctx.fill();
-        
-        if (isLocal) {
-            ctx.strokeStyle = 'white';
-            ctx.lineWidth = 2;
-            ctx.stroke();
-        }
-
-        if (p.kicking) {
-            ctx.strokeStyle = 'yellow';
-            ctx.lineWidth = 4;
-            ctx.beginPath();
-            ctx.arc(p.x, p.y, PLAYER_RADIUS + 4, 0, Math.PI*2);
-            ctx.stroke();
-        }
-
-        ctx.fillStyle = 'white';
-        ctx.font = 'bold 12px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText(p.name || "Player", p.x, p.y + PLAYER_RADIUS + 15);
-    }
-
-    function updateScoreUI() {
-        document.getElementById('score-red').innerText = gameState.scoreRed;
-        document.getElementById('score-blue').innerText = gameState.scoreBlue;
-    }
-
-    function showGoalUI() {
-        const msg = document.getElementById('goal-msg');
-        msg.classList.remove('hidden');
-        setTimeout(() => msg.classList.add('hidden'), 2000);
-    }
-
-    // --- Inputs ---
-    window.addEventListener('keydown', e => {
-        if (!keys[e.key]) {
-            keys[e.key] = true;
-            // Instantly show kicking aura to others
-            if (e.key === ' ' && currentRoom) savePlayerState(); 
-        }
-    });
-    
-    window.addEventListener('keyup', e => {
-        keys[e.key] = false;
-        if(e.key === ' ') {
-            // Instantly remove kicking aura for others
-            if(currentRoom) savePlayerState();
-        }
-    });
-
-    // Cleanup instance when closing tab
-    window.addEventListener('beforeunload', () => {
-        window.leaveRoom();
-    });
-
-    // Start rendering canvas pitch immediately
-    draw();
-
-    // Authenticate in the background
-    initAuth().catch(err => {
-        console.error("Auth Error:", err);
-        showError("Database connection failed. Check your Firebase Rules & Auth settings.");
-    });
-
-</script>
+        // Navbar scroll effect
+        window.addEventListener('scroll', () => {
+            const nav = document.getElementById('navbar');
+            if (window.scrollY > 20) {
+                nav.classList.add('shadow-md');
+                nav.classList.replace('py-4', 'py-0'); // Compact padding if adjusted
+            } else {
+                nav.classList.remove('shadow-md');
+            }
+        });
+    </script>
 </body>
 </html>
