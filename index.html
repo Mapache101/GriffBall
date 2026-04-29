@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multiplayer Soccer Arena</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background-color: #2a2a2a; color: white; overflow: hidden; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        canvas { 
+            background: #4a6741; 
+            border: 8px solid #3d3d3d; 
+            border-radius: 12px;
+            display: block;
+            margin: 0 auto;
+            image-rendering: pixelated;
+        }
+        .ui-panel { background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); }
+    </style>
+</head>
+<body class="flex flex-col items-center justify-center min-h-screen">
+
+    <div id="lobby" class="fixed inset-0 z-50 flex items-center justify-center ui-panel">
+        <div class="bg-zinc-800 p-8 rounded-xl shadow-2xl border border-zinc-700 w-96 text-center">
+            <h1 class="text-3xl font-bold mb-6 text-green-400">Soccer Arena</h1>
+            <input id="nickname" type="text" placeholder="Enter Nickname" maxlength="12" class="w-full p-3 mb-4 rounded bg-zinc-900 border border-zinc-600 focus:outline-none focus:border-green-500 text-white">
+            <div class="flex gap-4 mb-6">
+                <button onclick="joinTeam('red')" class="flex-1 p-4 bg-red-600 hover:bg-red-500 rounded font-bold transition">Red Team</button>
+                <button onclick="joinTeam('blue')" class="flex-1 p-4 bg-blue-600 hover:bg-blue-500 rounded font-bold transition">Blue Team</button>
+            </div>
+            <p class="text-zinc-400 text-sm">WASD/Arrows to Move • Space to Kick</p>
+        </div>
+    </div>
+
+    <div class="relative">
+        <div class="absolute top-4 left-0 right-0 flex justify-center items-center pointer-events-none px-10">
+            <div class="ui-panel px-6 py-2 rounded-full flex gap-8 items-center border border-zinc-600">
+                <div class="flex items-center gap-3">
+                    <div class="w-3 h-3 bg-red-500 rounded-full"></div>
+                    <span id="score-red" class="text-2xl font-black">0</span>
+                </div>
+                <div class="text-zinc-500 font-bold">-</div>
+                <div class="flex items-center gap-3">
+                    <span id="score-blue" class="text-2xl font-black">0</span>
+                    <div class="w-3 h-3 bg-blue-500 rounded-full"></div>
+                </div>
+            </div>
+        </div>
+        
+        <canvas id="gameCanvas"></canvas>
+        
+        <div id="goal-msg" class="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-7xl font-black text-yellow-400 hidden pointer-events-none drop-shadow-lg italic">
+            GOAL!
+        </div>
+    </div>
+
+    <div class="mt-4 text-zinc-500 text-sm">
+        Players Online: <span id="player-count">0</span> | ID: <span id="my-id">...</span>
+    </div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore, doc, setDoc, updateDoc, deleteDoc, onSnapshot, collection, query, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+    // --- Config & Init ---
+    const firebaseConfig = {
+        apiKey: "AIzaSyAacDt9YRIKu3_8LTwms70CwnA31WRfMIk",
+        authDomain: "griffball-3eb45.firebaseapp.com",
+        projectId: "griffball-3eb45",
+        storageBucket: "griffball-3eb45.firebasestorage.app",
+        messagingSenderId: "615795790042",
+        appId: "1:615795790042:web:aedeeda9c9914797c955e3"
+    };
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'griffball-3eb45';
+
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    
+    // Field Constants
+    const WIDTH = 800;
+    const HEIGHT = 500;
+    const PADDING = 40;
+    const GOAL_SIZE = 120;
+    const PLAYER_RADIUS = 15;
+    const BALL_RADIUS = 10;
+    
+    canvas.width = WIDTH;
+    canvas.height = HEIGHT;
+
+    // Game State
+    let user = null;
+    let localPlayer = {
+        id: null,
+        name: '',
+        team: 'red',
+        x: 0, y: 0,
+        vx: 0, vy: 0,
+        kicking: false,
+        lastUpdate: 0
+    };
+
+    let players = {};
+    let ball = { x: WIDTH/2, y: HEIGHT/2, vx: 0, vy: 0 };
+    let gameState = { scoreRed: 0, scoreBlue: 0, lastGoal: 0 };
+    
+    const keys = {};
+
+    // --- Interaction ---
+    window.joinTeam = (team) => {
+        const nick = document.getElementById('nickname').value.trim() || "Player";
+        localPlayer.name = nick;
+        localPlayer.team = team;
+        localPlayer.x = team === 'red' ? 150 : WIDTH - 150;
+        localPlayer.y = HEIGHT / 2;
+        document.getElementById('lobby').style.display = 'none';
+        
+        if(user) {
+            savePlayerState();
+        }
+    };
+
+    // --- Networking ---
+    async function initAuth() {
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+            await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+            await signInAnonymously(auth);
+        }
+    }
+
+    onAuthStateChanged(auth, (u) => {
+        if (u) {
+            user = u;
+            localPlayer.id = u.uid;
+            document.getElementById('my-id').innerText = u.uid;
+            
+            // Listen for players
+            const playersCol = collection(db, 'artifacts', appId, 'public', 'data', 'players');
+            onSnapshot(playersCol, (snapshot) => {
+                snapshot.docChanges().forEach(change => {
+                    if (change.type === "removed") {
+                        delete players[change.doc.id];
+                    } else {
+                        const data = change.doc.data();
+                        if (change.doc.id !== user.uid) {
+                            players[change.doc.id] = data;
+                        }
+                    }
+                });
+                document.getElementById('player-count').innerText = snapshot.size;
+            }, (err) => console.error(err));
+
+            // Listen for ball (Global state)
+            const gameDoc = doc(db, 'artifacts', appId, 'public', 'data', 'game');
+            onSnapshot(gameDoc, (docSnap) => {
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    // We only sync ball if we aren't the primary 'master' or just to sync state
+                    // In this simple version, we'll let the person closest to the ball calculate physics 
+                    // or use a simple shared state.
+                    if (data.ball) {
+                        // Smoothing could be added here
+                        ball.x = data.ball.x;
+                        ball.y = data.ball.y;
+                        ball.vx = data.ball.vx;
+                        ball.vy = data.ball.vy;
+                    }
+                    if (data.scores) {
+                        gameState.scoreRed = data.scores.red;
+                        gameState.scoreBlue = data.scores.blue;
+                        updateScoreUI();
+                    }
+                }
+            }, (err) => console.error(err));
+        }
+    });
+
+    async function savePlayerState() {
+        if (!user) return;
+        const playerRef = doc(db, 'artifacts', appId, 'public', 'data', 'players', user.uid);
+        await setDoc(playerRef, {
+            ...localPlayer,
+            lastSeen: serverTimestamp()
+        }, { merge: true });
+    }
+
+    async function updateBallOnServer() {
+        if (!user) return;
+        const gameRef = doc(db, 'artifacts', appId, 'public', 'data', 'game');
+        await setDoc(gameRef, {
+            ball: { x: ball.x, y: ball.y, vx: ball.vx, vy: ball.vy },
+            scores: { red: gameState.scoreRed, blue: gameState.scoreBlue }
+        }, { merge: true });
+    }
+
+    // --- Physics ---
+    function updatePhysics() {
+        // 1. Local Player Movement
+        const accel = 0.5;
+        const friction = 0.94;
+        
+        if (keys['ArrowUp'] || keys['w']) localPlayer.vy -= accel;
+        if (keys['ArrowDown'] || keys['s']) localPlayer.vy += accel;
+        if (keys['ArrowLeft'] || keys['a']) localPlayer.vx -= accel;
+        if (keys['ArrowRight'] || keys['d']) localPlayer.vx += accel;
+
+        localPlayer.vx *= friction;
+        localPlayer.vy *= friction;
+        localPlayer.x += localPlayer.vx;
+        localPlayer.y += localPlayer.vy;
+
+        // Player Bounds
+        localPlayer.x = Math.max(PADDING + PLAYER_RADIUS, Math.min(WIDTH - PADDING - PLAYER_RADIUS, localPlayer.x));
+        localPlayer.y = Math.max(PADDING + PLAYER_RADIUS, Math.min(HEIGHT - PADDING - PLAYER_RADIUS, localPlayer.y));
+
+        // 2. Ball Physics (Simplified: Only the player closest to ball controls its authority on server)
+        const ballFriction = 0.985;
+        ball.vx *= ballFriction;
+        ball.vy *= ballFriction;
+        ball.x += ball.vx;
+        ball.y += ball.vy;
+
+        // Ball - Wall Collisions
+        if (ball.y < PADDING + BALL_RADIUS || ball.y > HEIGHT - PADDING - BALL_RADIUS) {
+            ball.vy *= -0.7;
+            ball.y = ball.y < HEIGHT / 2 ? PADDING + BALL_RADIUS : HEIGHT - PADDING - BALL_RADIUS;
+        }
+
+        // Horizontal walls / Goals
+        const inGoalRange = (ball.y > HEIGHT/2 - GOAL_SIZE/2 && ball.y < HEIGHT/2 + GOAL_SIZE/2);
+        
+        if (!inGoalRange) {
+            if (ball.x < PADDING + BALL_RADIUS || ball.x > WIDTH - PADDING - BALL_RADIUS) {
+                ball.vx *= -0.7;
+                ball.x = ball.x < WIDTH / 2 ? PADDING + BALL_RADIUS : WIDTH - PADDING - BALL_RADIUS;
+            }
+        } else {
+            // Check for Goal
+            if (ball.x < 0) score('blue');
+            if (ball.x > WIDTH) score('red');
+        }
+
+        // 3. Player - Ball Collision
+        const dx = ball.x - localPlayer.x;
+        const dy = ball.y - localPlayer.y;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        const minDist = PLAYER_RADIUS + BALL_RADIUS;
+
+        if (dist < minDist) {
+            const angle = Math.atan2(dy, dx);
+            const force = 2.0;
+            
+            // Push ball
+            ball.vx = Math.cos(angle) * (Math.abs(localPlayer.vx) + force);
+            ball.vy = Math.sin(angle) * (Math.abs(localPlayer.vy) + force);
+            
+            // Kicking
+            if (keys[' ']) {
+                ball.vx *= 3;
+                ball.vy *= 3;
+                localPlayer.kicking = true;
+            } else {
+                localPlayer.kicking = false;
+            }
+            
+            // Solve overlap
+            const overlap = minDist - dist;
+            ball.x += Math.cos(angle) * overlap;
+            ball.y += Math.sin(angle) * overlap;
+
+            // Sync ball if we interacted
+            updateBallOnServer();
+        }
+
+        // Throttle updates to Firebase
+        if (Date.now() - localPlayer.lastUpdate > 50) {
+            savePlayerState();
+            localPlayer.lastUpdate = Date.now();
+        }
+    }
+
+    function score(team) {
+        if (Date.now() - gameState.lastGoal < 3000) return;
+        
+        if (team === 'red') gameState.scoreRed++;
+        else gameState.scoreBlue++;
+        
+        gameState.lastGoal = Date.now();
+        showGoalUI();
+        resetPositions();
+        updateBallOnServer();
+    }
+
+    function resetPositions() {
+        ball = { x: WIDTH/2, y: HEIGHT/2, vx: 0, vy: 0 };
+        localPlayer.vx = 0; localPlayer.vy = 0;
+        localPlayer.x = localPlayer.team === 'red' ? 150 : WIDTH - 150;
+        localPlayer.y = HEIGHT / 2;
+    }
+
+    // --- Rendering ---
+    function draw() {
+        ctx.clearRect(0, 0, WIDTH, HEIGHT);
+        
+        // Grass Pattern
+        ctx.fillStyle = '#4a6741';
+        ctx.fillRect(0, 0, WIDTH, HEIGHT);
+        
+        ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+        ctx.lineWidth = 40;
+        for(let i=0; i<WIDTH; i+=80) {
+            if((i/80)%2 === 0) ctx.fillRect(i, 0, 40, HEIGHT);
+        }
+
+        // Pitch Lines
+        ctx.strokeStyle = 'white';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(PADDING, PADDING, WIDTH - 2*PADDING, HEIGHT - 2*PADDING);
+        
+        // Mid line
+        ctx.beginPath();
+        ctx.moveTo(WIDTH/2, PADDING);
+        ctx.lineTo(WIDTH/2, HEIGHT-PADDING);
+        ctx.stroke();
+
+        // Mid circle
+        ctx.beginPath();
+        ctx.arc(WIDTH/2, HEIGHT/2, 60, 0, Math.PI*2);
+        ctx.stroke();
+
+        // Goals
+        ctx.strokeStyle = 'red';
+        ctx.strokeRect(0, HEIGHT/2 - GOAL_SIZE/2, PADDING, GOAL_SIZE);
+        ctx.strokeStyle = 'blue';
+        ctx.strokeRect(WIDTH - PADDING, HEIGHT/2 - GOAL_SIZE/2, PADDING, GOAL_SIZE);
+
+        // Draw Players
+        Object.values(players).forEach(p => drawDisc(p));
+        drawDisc(localPlayer, true);
+
+        // Draw Ball
+        ctx.fillStyle = 'white';
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = 'rgba(0,0,0,0.5)';
+        ctx.beginPath();
+        ctx.arc(ball.x, ball.y, BALL_RADIUS, 0, Math.PI*2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+
+        requestAnimationFrame(() => {
+            updatePhysics();
+            draw();
+        });
+    }
+
+    function drawDisc(p, isLocal = false) {
+        const color = p.team === 'red' ? '#ef4444' : '#3b82f6';
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, PLAYER_RADIUS, 0, Math.PI*2);
+        ctx.fill();
+        
+        // Outline for local player
+        if (isLocal) {
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
+
+        // Kick effect
+        if (p.kicking) {
+            ctx.strokeStyle = 'yellow';
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, PLAYER_RADIUS + 4, 0, Math.PI*2);
+            ctx.stroke();
+        }
+
+        // Name
+        ctx.fillStyle = 'white';
+        ctx.font = 'bold 12px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(p.name, p.x, p.y + PLAYER_RADIUS + 15);
+    }
+
+    function updateScoreUI() {
+        document.getElementById('score-red').innerText = gameState.scoreRed;
+        document.getElementById('score-blue').innerText = gameState.scoreBlue;
+    }
+
+    function showGoalUI() {
+        const msg = document.getElementById('goal-msg');
+        msg.classList.remove('hidden');
+        setTimeout(() => msg.classList.add('hidden'), 2000);
+    }
+
+    // --- Inputs ---
+    window.addEventListener('keydown', e => keys[e.key] = true);
+    window.addEventListener('keyup', e => {
+        keys[e.key] = false;
+        if(e.key === ' ') {
+            localPlayer.kicking = false;
+            savePlayerState();
+        }
+    });
+
+    // Cleanup on close
+    window.addEventListener('beforeunload', () => {
+        if (user) {
+            deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'players', user.uid));
+        }
+    });
+
+    // Start
+    initAuth().then(() => {
+        draw();
+    });
+
+</script>
+</body>
+</html>
