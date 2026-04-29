@@ -21,14 +21,31 @@
 <body class="flex flex-col items-center justify-center min-h-screen">
 
     <div id="lobby" class="fixed inset-0 z-50 flex items-center justify-center ui-panel">
-        <div class="bg-zinc-800 p-8 rounded-xl shadow-2xl border border-zinc-700 w-96 text-center">
-            <h1 class="text-3xl font-bold mb-6 text-green-400">Soccer Arena</h1>
-            <input id="nickname" type="text" placeholder="Enter Nickname" maxlength="12" class="w-full p-3 mb-4 rounded bg-zinc-900 border border-zinc-600 focus:outline-none focus:border-green-500 text-white">
-            <div class="flex gap-4 mb-6">
-                <button onclick="joinTeam('red')" class="flex-1 p-4 bg-red-600 hover:bg-red-500 rounded font-bold transition">Red Team</button>
-                <button onclick="joinTeam('blue')" class="flex-1 p-4 bg-blue-600 hover:bg-blue-500 rounded font-bold transition">Blue Team</button>
+        <div class="bg-zinc-800 p-8 rounded-xl shadow-2xl border border-zinc-700 w-96 text-center relative">
+            <h1 class="text-3xl font-bold mb-2 text-green-400">Soccer Arena</h1>
+            <div id="auth-error" class="text-red-400 text-xs mb-4 hidden bg-red-900/30 p-2 rounded">Error connecting. Make sure Anonymous Auth is enabled.</div>
+            
+            <div id="step-1">
+                <input id="nickname" type="text" placeholder="Enter Nickname" maxlength="12" class="w-full p-3 mb-4 rounded bg-zinc-900 border border-zinc-600 focus:outline-none focus:border-green-500 text-white">
+                <div class="flex gap-2 mb-4">
+                    <button onclick="createRoom()" class="flex-1 p-3 bg-emerald-600 hover:bg-emerald-500 rounded font-bold transition">Create Match</button>
+                </div>
+                <div class="flex gap-2 mb-4">
+                    <input id="room-code-input" type="text" placeholder="Room Code" maxlength="4" class="w-1/2 p-3 rounded bg-zinc-900 border border-zinc-600 focus:outline-none focus:border-green-500 text-white text-center uppercase">
+                    <button onclick="joinRoom()" class="w-1/2 p-3 bg-indigo-600 hover:bg-indigo-500 rounded font-bold transition">Join Match</button>
+                </div>
             </div>
-            <p class="text-zinc-400 text-sm">WASD/Arrows to Move • Space to Kick</p>
+
+            <div id="step-2" class="hidden">
+                <h2 class="text-xl text-white mb-4">Room: <span id="display-room-code" class="text-yellow-400 font-mono font-bold tracking-widest"></span></h2>
+                <div class="flex gap-4 mb-6">
+                    <button onclick="joinTeam('red')" class="flex-1 p-4 bg-red-600 hover:bg-red-500 rounded font-bold transition">Red Team</button>
+                    <button onclick="joinTeam('blue')" class="flex-1 p-4 bg-blue-600 hover:bg-blue-500 rounded font-bold transition">Blue Team</button>
+                </div>
+                <button onclick="cancelJoin()" class="text-zinc-500 text-sm hover:text-white transition">Cancel</button>
+            </div>
+            
+            <p class="text-zinc-400 text-sm mt-4">WASD/Arrows to Move • Space to Kick</p>
         </div>
     </div>
 
@@ -54,14 +71,15 @@
         </div>
     </div>
 
-    <div class="mt-4 text-zinc-500 text-sm">
-        Players Online: <span id="player-count">0</span> | ID: <span id="my-id">...</span>
+    <div class="mt-4 flex justify-between w-full max-w-[800px] text-zinc-500 text-sm px-2">
+        <div>Players: <span id="player-count">0</span> | Room: <span id="active-room-code" class="text-yellow-400 font-bold">None</span></div>
+        <button onclick="leaveRoom()" class="text-red-400 hover:text-red-300 underline font-bold">Leave Match</button>
     </div>
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
     import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-    import { getFirestore, doc, setDoc, updateDoc, deleteDoc, onSnapshot, collection, query, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+    import { getFirestore, doc, setDoc, getDoc, deleteDoc, onSnapshot, collection, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
     // --- Config & Init ---
     const firebaseConfig = {
@@ -93,6 +111,11 @@
 
     // Game State
     let user = null;
+    let currentRoom = null;
+    let isHost = false;
+    let unsubPlayers = null;
+    let unsubGame = null;
+
     let localPlayer = {
         id: null,
         name: '',
@@ -109,18 +132,100 @@
     
     const keys = {};
 
+    function showError(msg) {
+        const errDiv = document.getElementById('auth-error');
+        errDiv.innerText = msg;
+        errDiv.classList.remove('hidden');
+        setTimeout(() => errDiv.classList.add('hidden'), 4000);
+    }
+
     // --- Interaction ---
-    window.joinTeam = (team) => {
+    window.createRoom = async () => {
+        if (!user) return showError("Still connecting to database...");
+        const code = Math.random().toString(36).substring(2, 6).toUpperCase();
+        currentRoom = code;
+        isHost = true;
+        
+        document.getElementById('step-1').classList.add('hidden');
+        document.getElementById('step-2').classList.remove('hidden');
+        document.getElementById('display-room-code').innerText = code;
+        document.getElementById('active-room-code').innerText = code;
+
+        // Create room instance in Firestore
+        const gameRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', code);
+        await setDoc(gameRef, {
+            createdAt: serverTimestamp(),
+            host: user.uid,
+            ball: { x: WIDTH/2, y: HEIGHT/2, vx: 0, vy: 0 },
+            scores: { red: 0, blue: 0 }
+        });
+    };
+
+    window.joinRoom = async () => {
+        if (!user) return showError("Still connecting to database...");
+        const code = document.getElementById('room-code-input').value.trim().toUpperCase();
+        if(!code) return showError("Enter a Room Code");
+        
+        // Check if room instance exists
+        const gameRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', code);
+        const snap = await getDoc(gameRef);
+        if(!snap.exists()) {
+            return showError("Room not found! Check code.");
+        }
+
+        currentRoom = code;
+        isHost = false;
+        document.getElementById('step-1').classList.add('hidden');
+        document.getElementById('step-2').classList.remove('hidden');
+        document.getElementById('display-room-code').innerText = code;
+        document.getElementById('active-room-code').innerText = code;
+    };
+
+    window.cancelJoin = () => {
+        currentRoom = null;
+        isHost = false;
+        document.getElementById('step-1').classList.remove('hidden');
+        document.getElementById('step-2').classList.add('hidden');
+    }
+
+    window.joinTeam = async (team) => {
         const nick = document.getElementById('nickname').value.trim() || "Player";
         localPlayer.name = nick;
         localPlayer.team = team;
         localPlayer.x = team === 'red' ? 150 : WIDTH - 150;
         localPlayer.y = HEIGHT / 2;
+        
         document.getElementById('lobby').style.display = 'none';
         
-        if(user) {
-            savePlayerState();
+        setupNetworkListeners();
+        await savePlayerState();
+    };
+
+    window.leaveRoom = async () => {
+        if (!currentRoom) return;
+        
+        if (unsubPlayers) unsubPlayers();
+        if (unsubGame) unsubGame();
+        
+        if (user) {
+            // Remove player doc
+            await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', `room_${currentRoom}_players`, user.uid));
+            
+            // If Host, delete the match instance entirely
+            if (isHost) {
+                await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'rooms', currentRoom));
+            }
         }
+
+        // Reset state & UI
+        currentRoom = null;
+        isHost = false;
+        players = {};
+        document.getElementById('active-room-code').innerText = 'None';
+        document.getElementById('lobby').style.display = 'flex';
+        document.getElementById('step-1').classList.remove('hidden');
+        document.getElementById('step-2').classList.add('hidden');
+        resetPositions();
     };
 
     // --- Networking ---
@@ -136,52 +241,59 @@
         if (u) {
             user = u;
             localPlayer.id = u.uid;
-            document.getElementById('my-id').innerText = u.uid;
-            
-            // Listen for players
-            const playersCol = collection(db, 'artifacts', appId, 'public', 'data', 'players');
-            onSnapshot(playersCol, (snapshot) => {
-                snapshot.docChanges().forEach(change => {
-                    if (change.type === "removed") {
-                        delete players[change.doc.id];
-                    } else {
-                        const data = change.doc.data();
-                        if (change.doc.id !== user.uid) {
-                            players[change.doc.id] = data;
-                        }
-                    }
-                });
-                document.getElementById('player-count').innerText = snapshot.size;
-            }, (err) => console.error(err));
-
-            // Listen for ball (Global state)
-            const gameDoc = doc(db, 'artifacts', appId, 'public', 'data', 'game');
-            onSnapshot(gameDoc, (docSnap) => {
-                if (docSnap.exists()) {
-                    const data = docSnap.data();
-                    // We only sync ball if we aren't the primary 'master' or just to sync state
-                    // In this simple version, we'll let the person closest to the ball calculate physics 
-                    // or use a simple shared state.
-                    if (data.ball) {
-                        // Smoothing could be added here
-                        ball.x = data.ball.x;
-                        ball.y = data.ball.y;
-                        ball.vx = data.ball.vx;
-                        ball.vy = data.ball.vy;
-                    }
-                    if (data.scores) {
-                        gameState.scoreRed = data.scores.red;
-                        gameState.scoreBlue = data.scores.blue;
-                        updateScoreUI();
-                    }
-                }
-            }, (err) => console.error(err));
+        } else {
+            showError("Authentication lost.");
         }
     });
 
+    function setupNetworkListeners() {
+        if (!user || !currentRoom) return;
+
+        // Listen for players in this specific room
+        const playersCol = collection(db, 'artifacts', appId, 'public', 'data', `room_${currentRoom}_players`);
+        unsubPlayers = onSnapshot(playersCol, (snapshot) => {
+            snapshot.docChanges().forEach(change => {
+                if (change.type === "removed") {
+                    delete players[change.doc.id];
+                } else {
+                    const data = change.doc.data();
+                    if (change.doc.id !== user.uid) {
+                        players[change.doc.id] = data;
+                    }
+                }
+            });
+            document.getElementById('player-count').innerText = snapshot.size;
+        }, (err) => console.error(err));
+
+        // Listen for room game state (ball, score)
+        const gameDoc = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', currentRoom);
+        unsubGame = onSnapshot(gameDoc, (docSnap) => {
+            if (docSnap.exists()) {
+                const data = docSnap.data();
+                if (data.ball) {
+                    ball.x = data.ball.x;
+                    ball.y = data.ball.y;
+                    ball.vx = data.ball.vx;
+                    ball.vy = data.ball.vy;
+                }
+                if (data.scores) {
+                    gameState.scoreRed = data.scores.red;
+                    gameState.scoreBlue = data.scores.blue;
+                    updateScoreUI();
+                }
+            } else {
+                // Room document was deleted (Host left the match)
+                if (!isHost && currentRoom) {
+                    showError("The host ended the match.");
+                    window.leaveRoom();
+                }
+            }
+        }, (err) => console.error(err));
+    }
+
     async function savePlayerState() {
-        if (!user) return;
-        const playerRef = doc(db, 'artifacts', appId, 'public', 'data', 'players', user.uid);
+        if (!user || !currentRoom) return;
+        const playerRef = doc(db, 'artifacts', appId, 'public', 'data', `room_${currentRoom}_players`, user.uid);
         await setDoc(playerRef, {
             ...localPlayer,
             lastSeen: serverTimestamp()
@@ -189,8 +301,8 @@
     }
 
     async function updateBallOnServer() {
-        if (!user) return;
-        const gameRef = doc(db, 'artifacts', appId, 'public', 'data', 'game');
+        if (!user || !currentRoom) return;
+        const gameRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', currentRoom);
         await setDoc(gameRef, {
             ball: { x: ball.x, y: ball.y, vx: ball.vx, vy: ball.vy },
             scores: { red: gameState.scoreRed, blue: gameState.scoreBlue }
@@ -199,6 +311,9 @@
 
     // --- Physics ---
     function updatePhysics() {
+        // Only run physics if actively in a room and pitch is shown
+        if (!currentRoom || document.getElementById('lobby').style.display !== 'none') return;
+
         // 1. Local Player Movement
         const accel = 0.5;
         const friction = 0.94;
@@ -213,24 +328,21 @@
         localPlayer.x += localPlayer.vx;
         localPlayer.y += localPlayer.vy;
 
-        // Player Bounds
         localPlayer.x = Math.max(PADDING + PLAYER_RADIUS, Math.min(WIDTH - PADDING - PLAYER_RADIUS, localPlayer.x));
         localPlayer.y = Math.max(PADDING + PLAYER_RADIUS, Math.min(HEIGHT - PADDING - PLAYER_RADIUS, localPlayer.y));
 
-        // 2. Ball Physics (Simplified: Only the player closest to ball controls its authority on server)
+        // 2. Ball Physics
         const ballFriction = 0.985;
         ball.vx *= ballFriction;
         ball.vy *= ballFriction;
         ball.x += ball.vx;
         ball.y += ball.vy;
 
-        // Ball - Wall Collisions
         if (ball.y < PADDING + BALL_RADIUS || ball.y > HEIGHT - PADDING - BALL_RADIUS) {
             ball.vy *= -0.7;
             ball.y = ball.y < HEIGHT / 2 ? PADDING + BALL_RADIUS : HEIGHT - PADDING - BALL_RADIUS;
         }
 
-        // Horizontal walls / Goals
         const inGoalRange = (ball.y > HEIGHT/2 - GOAL_SIZE/2 && ball.y < HEIGHT/2 + GOAL_SIZE/2);
         
         if (!inGoalRange) {
@@ -239,7 +351,6 @@
                 ball.x = ball.x < WIDTH / 2 ? PADDING + BALL_RADIUS : WIDTH - PADDING - BALL_RADIUS;
             }
         } else {
-            // Check for Goal
             if (ball.x < 0) score('blue');
             if (ball.x > WIDTH) score('red');
         }
@@ -254,11 +365,9 @@
             const angle = Math.atan2(dy, dx);
             const force = 2.0;
             
-            // Push ball
             ball.vx = Math.cos(angle) * (Math.abs(localPlayer.vx) + force);
             ball.vy = Math.sin(angle) * (Math.abs(localPlayer.vy) + force);
             
-            // Kicking
             if (keys[' ']) {
                 ball.vx *= 3;
                 ball.vy *= 3;
@@ -267,16 +376,13 @@
                 localPlayer.kicking = false;
             }
             
-            // Solve overlap
             const overlap = minDist - dist;
             ball.x += Math.cos(angle) * overlap;
             ball.y += Math.sin(angle) * overlap;
 
-            // Sync ball if we interacted
             updateBallOnServer();
         }
 
-        // Throttle updates to Firebase
         if (Date.now() - localPlayer.lastUpdate > 50) {
             savePlayerState();
             localPlayer.lastUpdate = Date.now();
@@ -284,6 +390,7 @@
     }
 
     function score(team) {
+        if (!isHost) return; // Only host handles goal events
         if (Date.now() - gameState.lastGoal < 3000) return;
         
         if (team === 'red') gameState.scoreRed++;
@@ -300,13 +407,13 @@
         localPlayer.vx = 0; localPlayer.vy = 0;
         localPlayer.x = localPlayer.team === 'red' ? 150 : WIDTH - 150;
         localPlayer.y = HEIGHT / 2;
+        if(isHost && currentRoom) updateBallOnServer();
     }
 
     // --- Rendering ---
     function draw() {
         ctx.clearRect(0, 0, WIDTH, HEIGHT);
         
-        // Grass Pattern
         ctx.fillStyle = '#4a6741';
         ctx.fillRect(0, 0, WIDTH, HEIGHT);
         
@@ -316,33 +423,31 @@
             if((i/80)%2 === 0) ctx.fillRect(i, 0, 40, HEIGHT);
         }
 
-        // Pitch Lines
         ctx.strokeStyle = 'white';
         ctx.lineWidth = 3;
         ctx.strokeRect(PADDING, PADDING, WIDTH - 2*PADDING, HEIGHT - 2*PADDING);
         
-        // Mid line
         ctx.beginPath();
         ctx.moveTo(WIDTH/2, PADDING);
         ctx.lineTo(WIDTH/2, HEIGHT-PADDING);
         ctx.stroke();
 
-        // Mid circle
         ctx.beginPath();
         ctx.arc(WIDTH/2, HEIGHT/2, 60, 0, Math.PI*2);
         ctx.stroke();
 
-        // Goals
         ctx.strokeStyle = 'red';
         ctx.strokeRect(0, HEIGHT/2 - GOAL_SIZE/2, PADDING, GOAL_SIZE);
         ctx.strokeStyle = 'blue';
         ctx.strokeRect(WIDTH - PADDING, HEIGHT/2 - GOAL_SIZE/2, PADDING, GOAL_SIZE);
 
-        // Draw Players
         Object.values(players).forEach(p => drawDisc(p));
-        drawDisc(localPlayer, true);
+        
+        // Only draw local player if they successfully joined the room
+        if (currentRoom && document.getElementById('lobby').style.display === 'none') {
+            drawDisc(localPlayer, true);
+        }
 
-        // Draw Ball
         ctx.fillStyle = 'white';
         ctx.shadowBlur = 10;
         ctx.shadowColor = 'rgba(0,0,0,0.5)';
@@ -358,20 +463,19 @@
     }
 
     function drawDisc(p, isLocal = false) {
+        if(p.x === undefined || p.y === undefined) return;
         const color = p.team === 'red' ? '#ef4444' : '#3b82f6';
         ctx.fillStyle = color;
         ctx.beginPath();
         ctx.arc(p.x, p.y, PLAYER_RADIUS, 0, Math.PI*2);
         ctx.fill();
         
-        // Outline for local player
         if (isLocal) {
             ctx.strokeStyle = 'white';
             ctx.lineWidth = 2;
             ctx.stroke();
         }
 
-        // Kick effect
         if (p.kicking) {
             ctx.strokeStyle = 'yellow';
             ctx.lineWidth = 4;
@@ -380,7 +484,6 @@
             ctx.stroke();
         }
 
-        // Name
         ctx.fillStyle = 'white';
         ctx.font = 'bold 12px sans-serif';
         ctx.textAlign = 'center';
@@ -404,20 +507,22 @@
         keys[e.key] = false;
         if(e.key === ' ') {
             localPlayer.kicking = false;
-            savePlayerState();
+            if(currentRoom) savePlayerState();
         }
     });
 
-    // Cleanup on close
+    // Cleanup instance when closing tab
     window.addEventListener('beforeunload', () => {
-        if (user) {
-            deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'players', user.uid));
-        }
+        window.leaveRoom();
     });
 
-    // Start
-    initAuth().then(() => {
-        draw();
+    // Start rendering canvas pitch immediately
+    draw();
+
+    // Authenticate in the background
+    initAuth().catch(err => {
+        console.error("Auth Error:", err);
+        showError("Database connection failed. Check your Firebase Rules & Auth settings.");
     });
 
 </script>
